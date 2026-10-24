@@ -1,1 +1,2 @@
-console.log("Initiated Server! -\_(*-*)_/-")
+// Entrypoint wrapper
+import './src/index.ts';
