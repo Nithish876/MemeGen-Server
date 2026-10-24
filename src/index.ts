@@ -17,3 +17,5 @@ app.listen(PORT, async () => {
     await db.templates.seedIfEmpty();
   }
 });
+
+export default app;

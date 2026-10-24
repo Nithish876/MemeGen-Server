@@ -1,9 +1,9 @@
 import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
-import swaggerUi from 'swagger-ui-express';
 import apiRouter from './routes/index.js';
 import { swaggerDocument } from './config/swagger.js';
+import { getSwaggerHtml } from './config/swaggerHtml.js';
 
 dotenv.config();
 
@@ -34,32 +34,37 @@ app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
 // -------------------------------------------------------------
-// Swagger API Documentation Setup
+// Swagger API Documentation Setup (Vercel & Serverless Compatible)
 // -------------------------------------------------------------
-const swaggerOptions = {
-  customSiteTitle: 'MemeHub REST API Docs',
-  customCss: `
-    .swagger-ui .topbar { background-color: #071330; }
-    .swagger-ui .topbar .download-url-wrapper { display: none; }
-    .swagger-ui .info { margin: 24px 0; }
-    .swagger-ui .info .title { color: #0284c7; }
-    .swagger-ui .btn.authorize { background-color: #0284c7; color: #fff; border-color: #0284c7; }
-  `,
-  swaggerOptions: {
-    persistAuthorization: true,
-    docExpansion: 'list',
-    filter: true,
-  },
+const renderSwaggerDocs = (_req: Request, res: Response) => {
+  res.setHeader('Content-Type', 'text/html; charset=utf-8');
+  res.send(getSwaggerHtml());
 };
 
-// Serve Swagger UI at both /api-docs and /api/v1/docs
-app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument, swaggerOptions));
-app.use('/api/v1/docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument, swaggerOptions));
-
-// Raw OpenAPI JSON spec endpoint
-app.get('/api-docs.json', (_req: Request, res: Response) => {
+const sendSwaggerJson = (_req: Request, res: Response) => {
   res.setHeader('Content-Type', 'application/json');
-  res.send(swaggerDocument);
+  res.json(swaggerDocument);
+};
+
+// Swagger UI Routes (with & without trailing slashes)
+app.get(['/api-docs', '/api-docs/', '/api/v1/docs', '/api/v1/docs/'], renderSwaggerDocs);
+
+// Raw OpenAPI JSON spec endpoints
+app.get(['/api-docs.json', '/api/v1/docs.json'], sendSwaggerJson);
+
+// CDN redirects for any cached or legacy static requests under /api-docs/
+app.get(['/api-docs/swagger-ui-bundle.js', '/api/v1/docs/swagger-ui-bundle.js'], (_req: Request, res: Response) => {
+  res.redirect('https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/5.18.2/swagger-ui-bundle.min.js');
+});
+app.get(['/api-docs/swagger-ui-standalone-preset.js', '/api/v1/docs/swagger-ui-standalone-preset.js'], (_req: Request, res: Response) => {
+  res.redirect('https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/5.18.2/swagger-ui-standalone-preset.min.js');
+});
+app.get(['/api-docs/swagger-ui.css', '/api/v1/docs/swagger-ui.css'], (_req: Request, res: Response) => {
+  res.redirect('https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/5.18.2/swagger-ui.min.css');
+});
+app.get(['/api-docs/swagger-ui-init.js', '/api/v1/docs/swagger-ui-init.js'], (_req: Request, res: Response) => {
+  res.setHeader('Content-Type', 'application/javascript');
+  res.send('/* Handled by MemeHub CDN Swagger UI */');
 });
 
 // Mount API v1 router
