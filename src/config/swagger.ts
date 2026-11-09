@@ -1,24 +1,28 @@
 export const swaggerDocument = {
   openapi: '3.0.3',
   info: {
-    title: 'MemeHub REST API & Supabase Backend',
-    version: '1.0.0',
+    title: 'MemeHub REST API & Admin Platform',
+    version: '2.0.0',
     description: `
-## Welcome to the MemeHub Backend API
+## Welcome to the MemeHub Backend API & Platform Suite
 
-MemeHub is a viral meme generation, canvas editing, and community publishing platform.
-This API handles:
-- **Authentication**: Creator sign-up, sign-in, JWT token generation, and user profile management.
+MemeHub is a viral meme generation, canvas editing, community publishing, and monetization platform.
+This API provides comprehensive services for:
+- **Authentication & Security**: Creator sign-up, sign-in, session revocation, Google OAuth, and secure password encryption using **bcrypt** (salt factor 10).
 - **Templates**: Curated meme templates with automatic category filtering, search, and pre-configured text layout slots.
-- **Editing Drafts (Auto-Sync)**: Continuous real-time syncing of in-progress canvas layers, positions, and styling to **Supabase** (or local resilient store).
-- **Meme Persistence**: Permanent storage of exported and published memes with community likes and feedback.
+- **Editing Drafts (Auto-Sync)**: Continuous real-time syncing of in-progress canvas layers, positions, and styling to **Supabase** (or resilient JSON store). Supports both authenticated accounts and guest creator sessions.
+- **Meme Persistence & Moderation**: Storage of exported memes with community likes, publishing moderation, and author attribution.
+- **AI Caption Assistant**: Contextual caption generator generating viral punchlines across multiple tones (funny, sarcastic, relatable, punny, absurdist, professional).
+- **Subscriptions & Purchases**: Monetization lifecycle with checkout, tier management (Free, Pro, Enterprise), and transaction recording.
+- **Traffic Telemetry**: Client-side event tracking, device breakdown, and aggregate traffic metrics.
+- **Admin Panel Suite**: Protected administrator dashboard with revenue KPIs, MRR, 7-day traffic trends, user tracking & role elevation, purchase ledgers, and meme moderation.
 
 ### Authentication
 Protected endpoints require an HTTP Bearer JWT token in the \`Authorization\` header:
 \`\`\`http
 Authorization: Bearer <your_jwt_token>
 \`\`\`
-Obtain a token via \`POST /api/v1/auth/login\` or \`POST /api/v1/auth/register\`.
+Admin endpoints require either an administrative Bearer token (\`role: 'admin'\`) or an \`x-admin-key: secret-admin\` header.
     `,
     contact: {
       name: 'MemeHub Engineering',
@@ -31,18 +35,22 @@ Obtain a token via \`POST /api/v1/auth/login\` or \`POST /api/v1/auth/register\`
   },
   servers: [
     {
+      url: '/api/v1',
+      description: 'Current Origin API (Auto-detected)',
+    },
+    {
       url: 'http://localhost:5000/api/v1',
       description: 'Local Development Server',
     },
     {
-      url: 'https://api.memegen.example.com/api/v1',
-      description: 'Production Server',
+      url: 'https://meme-gen-server.vercel.app/api/v1',
+      description: 'Production Vercel Cloud Server',
     },
   ],
   tags: [
     {
       name: 'Authentication',
-      description: 'User registration, login, profile verification, and session logout',
+      description: 'User registration, login, profile verification, session logout, bcrypt password reset, and Google OAuth',
     },
     {
       name: 'Templates',
@@ -50,11 +58,27 @@ Obtain a token via \`POST /api/v1/auth/login\` or \`POST /api/v1/auth/register\`
     },
     {
       name: 'Drafts',
-      description: 'In-progress meme editing canvas state synchronization and recovery',
+      description: 'In-progress meme editing canvas state synchronization and recovery (Guest & Authenticated)',
     },
     {
       name: 'Memes',
-      description: 'User exported memes library, community explore feed, and likes',
+      description: 'User exported memes library, community explore feed, publish moderation, and likes',
+    },
+    {
+      name: 'AI Assistant',
+      description: 'Contextual AI-generated meme captions with viral score ratings, customizable tone presets, and multi-language support',
+    },
+    {
+      name: 'Subscriptions',
+      description: 'Plan upgrade checkout (Free, Pro, Enterprise), payment processing, and subscription lifecycle management',
+    },
+    {
+      name: 'Analytics',
+      description: 'Client traffic telemetry, page view tracking, device breakdown, and traffic aggregation',
+    },
+    {
+      name: 'Admin',
+      description: 'Protected administration panel: KPIs, weekly traffic analytics, user tracking, role elevation, financial orders, and meme moderation',
     },
     {
       name: 'System',
@@ -338,6 +362,209 @@ Obtain a token via \`POST /api/v1/auth/login\` or \`POST /api/v1/auth/register\`
           },
         },
       },
+      ResetPasswordRequest: {
+        type: 'object',
+        required: ['email', 'newPassword'],
+        properties: {
+          email: { type: 'string', format: 'email', example: 'sarah@example.com' },
+          newPassword: { type: 'string', format: 'password', minLength: 8, example: 'NewSecretPass123!' },
+        },
+      },
+      GoogleAuthRequest: {
+        type: 'object',
+        properties: {
+          credential: { type: 'string', example: 'eyJhbGciOiJSUzI1NiIs...' },
+          email: { type: 'string', format: 'email', example: 'creator@gmail.com' },
+          fullName: { type: 'string', example: 'Alex Developer' },
+          avatarUrl: { type: 'string', example: 'https://lh3.googleusercontent.com/a/photo.jpg' },
+        },
+      },
+      UpdateMemeRequest: {
+        type: 'object',
+        properties: {
+          title: { type: 'string', example: 'Updated Meme Title' },
+          isPublic: { type: 'boolean', example: true },
+          textLayers: { type: 'array', items: { $ref: '#/components/schemas/TextLayer' } },
+          canvasSettings: { $ref: '#/components/schemas/CanvasSettings' },
+        },
+      },
+      AiCaptionRequest: {
+        type: 'object',
+        required: ['prompt'],
+        properties: {
+          prompt: { type: 'string', example: 'when production code works without a single bug' },
+          tone: {
+            type: 'string',
+            enum: ['funny', 'sarcastic', 'relatable', 'punny', 'absurdist', 'professional', 'dark'],
+            default: 'funny',
+            example: 'sarcastic',
+          },
+          language: { type: 'string', default: 'en', example: 'en' },
+          memeTemplateId: { type: 'string', example: 'drake' },
+        },
+      },
+      AiCaptionSuggestion: {
+        type: 'object',
+        properties: {
+          id: { type: 'string', example: 'cap-1' },
+          title: { type: 'string', example: 'Junior dev triumph' },
+          topText: { type: 'string', example: 'TESTING IN PRODUCTION' },
+          bottomText: { type: 'string', example: 'IT ACTUALLY WORKED ON FIRST TRY' },
+          explanation: { type: 'string', example: 'Hilarious subversion of developer imposter syndrome.' },
+          viralScore: { type: 'integer', example: 96 },
+          tags: { type: 'array', items: { type: 'string' }, example: ['coding', 'luck', 'devops'] },
+        },
+      },
+      SubscriptionCheckoutRequest: {
+        type: 'object',
+        required: ['planId'],
+        properties: {
+          planId: { type: 'string', enum: ['free', 'pro', 'enterprise'], example: 'pro' },
+          billingCycle: { type: 'string', enum: ['monthly', 'annual'], default: 'monthly', example: 'monthly' },
+          paymentMethod: { type: 'string', default: 'Credit Card', example: 'Visa •••• 4242' },
+          returnUrl: { type: 'string', example: '/payment-success' },
+        },
+      },
+      SubscriptionRecord: {
+        type: 'object',
+        properties: {
+          id: { type: 'string', example: 'sub-7819' },
+          userId: { type: 'string', example: 'user-1' },
+          planId: { type: 'string', example: 'pro' },
+          status: { type: 'string', enum: ['active', 'canceled', 'past_due'], example: 'active' },
+          billingCycle: { type: 'string', example: 'monthly' },
+          amount: { type: 'number', example: 9.99 },
+          currentPeriodEnd: { type: 'string', format: 'date-time' },
+        },
+      },
+      TrafficTrackRequest: {
+        type: 'object',
+        required: ['path'],
+        properties: {
+          path: { type: 'string', example: '/editor' },
+          pageTitle: { type: 'string', example: 'Meme Editor | MemeHub' },
+          referrer: { type: 'string', example: 'https://google.com' },
+          device: { type: 'string', enum: ['desktop', 'mobile', 'tablet'], example: 'desktop' },
+          sessionId: { type: 'string', example: 'sess-91823' },
+        },
+      },
+      AdminDashboardStats: {
+        type: 'object',
+        properties: {
+          kpis: {
+            type: 'object',
+            properties: {
+              totalRevenue: { type: 'number', example: 158.96 },
+              monthlyRecurringRevenue: { type: 'number', example: 57.97 },
+              totalUsers: { type: 'integer', example: 240 },
+              activeProSubscribers: { type: 'integer', example: 18 },
+              totalMemes: { type: 'integer', example: 1204 },
+              totalDrafts: { type: 'integer', example: 382 },
+              totalPageViews: { type: 'integer', example: 14200 },
+              uniqueVisitors: { type: 'integer', example: 4850 },
+              conversionRate: { type: 'number', example: 7.5 },
+            },
+          },
+          trafficChart: {
+            type: 'array',
+            items: {
+              type: 'object',
+              properties: {
+                date: { type: 'string', example: '2026-11-08' },
+                views: { type: 'integer', example: 1240 },
+                uniqueVisitors: { type: 'integer', example: 890 },
+              },
+            },
+          },
+          revenueChart: {
+            type: 'array',
+            items: {
+              type: 'object',
+              properties: {
+                month: { type: 'string', example: 'Oct' },
+                revenue: { type: 'number', example: 2420 },
+              },
+            },
+          },
+          deviceBreakdown: {
+            type: 'object',
+            properties: {
+              desktop: { type: 'integer', example: 55 },
+              mobile: { type: 'integer', example: 35 },
+              tablet: { type: 'integer', example: 10 },
+            },
+          },
+          topPages: {
+            type: 'array',
+            items: {
+              type: 'object',
+              properties: {
+                path: { type: 'string', example: '/editor' },
+                views: { type: 'integer', example: 4200 },
+                percentage: { type: 'integer', example: 30 },
+              },
+            },
+          },
+          recentActivity: {
+            type: 'array',
+            items: {
+              type: 'object',
+              properties: {
+                id: { type: 'string', example: 'act-1' },
+                type: { type: 'string', example: 'purchase' },
+                title: { type: 'string', example: 'New Subscription' },
+                description: { type: 'string', example: 'User upgraded to Pro' },
+                timestamp: { type: 'string', format: 'date-time' },
+              },
+            },
+          },
+          systemHealth: {
+            type: 'object',
+            properties: {
+              status: { type: 'string', example: 'optimal' },
+              uptime: { type: 'string', example: '99.98%' },
+              database: { type: 'string', example: 'Supabase / Resilient Store' },
+              apiLatencyMs: { type: 'integer', example: 24 },
+            },
+          },
+        },
+      },
+      AdminUserItem: {
+        type: 'object',
+        properties: {
+          id: { type: 'string', example: 'user-1' },
+          fullName: { type: 'string', example: 'Sarah Connor' },
+          email: { type: 'string', format: 'email', example: 'sarah@example.com' },
+          avatarUrl: { type: 'string', example: '/Profille/no-dp_16.webp' },
+          role: { type: 'string', enum: ['user', 'creator', 'admin'], example: 'creator' },
+          createdAt: { type: 'string', format: 'date-time' },
+          purchasesCount: { type: 'integer', example: 2 },
+        },
+      },
+      AdminUpdateRoleRequest: {
+        type: 'object',
+        required: ['role'],
+        properties: {
+          role: { type: 'string', enum: ['user', 'creator', 'admin'], example: 'admin' },
+        },
+      },
+      PurchaseRecord: {
+        type: 'object',
+        properties: {
+          id: { type: 'string', example: 'pur-1' },
+          orderId: { type: 'string', example: 'ORD-78192' },
+          userId: { type: 'string', example: 'user-1' },
+          userEmail: { type: 'string', example: 'alex@example.com' },
+          userName: { type: 'string', example: 'Alex Dev' },
+          planId: { type: 'string', example: 'pro' },
+          amount: { type: 'number', example: 9.99 },
+          currency: { type: 'string', example: 'USD' },
+          status: { type: 'string', example: 'active' },
+          billingCycle: { type: 'string', example: 'monthly' },
+          paymentMethod: { type: 'string', example: 'Credit Card' },
+          createdAt: { type: 'string', format: 'date-time' },
+        },
+      },
     },
   },
   paths: {
@@ -464,6 +691,86 @@ Obtain a token via \`POST /api/v1/auth/login\` or \`POST /api/v1/auth/register\`
                     message: { type: 'string', example: 'Logged out successfully.' },
                   },
                 },
+              },
+            },
+          },
+        },
+      },
+    },
+    '/auth/reset-password': {
+      post: {
+        tags: ['Authentication'],
+        summary: 'Reset account password with bcrypt encryption',
+        description: 'Securely hashes the new password with bcrypt (salt rounds 10) and updates the user profile credentials.',
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: { $ref: '#/components/schemas/ResetPasswordRequest' },
+            },
+          },
+        },
+        responses: {
+          200: {
+            description: 'Password reset successfully',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    success: { type: 'boolean', example: true },
+                    message: { type: 'string', example: 'Password reset successfully. You can now log in.' },
+                  },
+                },
+              },
+            },
+          },
+          400: {
+            description: 'Validation failed (e.g. password too short or email missing)',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/ApiErrorResponse' },
+              },
+            },
+          },
+          404: {
+            description: 'User with provided email not found',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/ApiErrorResponse' },
+              },
+            },
+          },
+        },
+      },
+    },
+    '/auth/google': {
+      post: {
+        tags: ['Authentication'],
+        summary: 'Google OAuth Single Sign-On',
+        description: 'Authenticates or registers a user via Google credentials and returns an active JWT session token.',
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: { $ref: '#/components/schemas/GoogleAuthRequest' },
+            },
+          },
+        },
+        responses: {
+          200: {
+            description: 'Google authentication successful',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/AuthSuccessResponse' },
+              },
+            },
+          },
+          400: {
+            description: 'Invalid Google credential token',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/ApiErrorResponse' },
               },
             },
           },
@@ -819,6 +1126,107 @@ Obtain a token via \`POST /api/v1/auth/login\` or \`POST /api/v1/auth/register\`
           404: { description: 'Meme not found' },
         },
       },
+      put: {
+        tags: ['Memes'],
+        summary: 'Update saved meme details or canvas layers',
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          {
+            name: 'id',
+            in: 'path',
+            required: true,
+            schema: { type: 'string' },
+          },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: { $ref: '#/components/schemas/UpdateMemeRequest' },
+            },
+          },
+        },
+        responses: {
+          200: {
+            description: 'Meme updated successfully',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    success: { type: 'boolean', example: true },
+                    data: { $ref: '#/components/schemas/SavedMemeItem' },
+                  },
+                },
+              },
+            },
+          },
+          404: { description: 'Meme not found' },
+        },
+      },
+      delete: {
+        tags: ['Memes'],
+        summary: 'Delete saved meme from library',
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          {
+            name: 'id',
+            in: 'path',
+            required: true,
+            schema: { type: 'string' },
+          },
+        ],
+        responses: {
+          200: {
+            description: 'Meme deleted successfully',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    success: { type: 'boolean', example: true },
+                    message: { type: 'string', example: 'Meme removed successfully.' },
+                  },
+                },
+              },
+            },
+          },
+          404: { description: 'Meme not found' },
+        },
+      },
+    },
+    '/memes/{id}/publish': {
+      post: {
+        tags: ['Memes'],
+        summary: 'Toggle public publishing for community explore',
+        description: 'Toggles whether a meme appears publicly on the Community Explore feed.',
+        parameters: [
+          {
+            name: 'id',
+            in: 'path',
+            required: true,
+            schema: { type: 'string' },
+          },
+        ],
+        responses: {
+          200: {
+            description: 'Publishing state updated',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    success: { type: 'boolean', example: true },
+                    data: { $ref: '#/components/schemas/SavedMemeItem' },
+                    message: { type: 'string', example: 'Meme publishing status toggled.' },
+                  },
+                },
+              },
+            },
+          },
+          404: { description: 'Meme not found' },
+        },
+      },
     },
     '/memes/{id}/like': {
       post: {
@@ -853,6 +1261,511 @@ Obtain a token via \`POST /api/v1/auth/login\` or \`POST /api/v1/auth/register\`
               },
             },
           },
+        },
+      },
+    },
+    '/ai/generate-captions': {
+      post: {
+        tags: ['AI Assistant'],
+        summary: 'Generate viral meme captions using AI',
+        description: 'Generates structured, witty meme punchlines tailored to viral trends and specified humor tone presets.',
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: { $ref: '#/components/schemas/AiCaptionRequest' },
+            },
+          },
+        },
+        responses: {
+          200: {
+            description: 'Captions generated successfully',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    success: { type: 'boolean', example: true },
+                    data: {
+                      type: 'array',
+                      items: { $ref: '#/components/schemas/AiCaptionSuggestion' },
+                    },
+                    meta: {
+                      type: 'object',
+                      properties: {
+                        tone: { type: 'string', example: 'sarcastic' },
+                        language: { type: 'string', example: 'en' },
+                        count: { type: 'integer', example: 4 },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          400: {
+            description: 'Missing prompt or invalid tone',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/ApiErrorResponse' },
+              },
+            },
+          },
+        },
+      },
+    },
+    '/subscriptions/checkout': {
+      post: {
+        tags: ['Subscriptions'],
+        summary: 'Process subscription plan upgrade or checkout',
+        description: 'Upgrades the user to Pro or Enterprise tier and records a financial purchase transaction.',
+        security: [{ bearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: { $ref: '#/components/schemas/SubscriptionCheckoutRequest' },
+            },
+          },
+        },
+        responses: {
+          200: {
+            description: 'Checkout processed successfully',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    success: { type: 'boolean', example: true },
+                    data: {
+                      type: 'object',
+                      properties: {
+                        subscription: { $ref: '#/components/schemas/SubscriptionRecord' },
+                        purchase: { $ref: '#/components/schemas/PurchaseRecord' },
+                        redirectUrl: { type: 'string', example: '/payment-success' },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          400: { description: 'Invalid plan or billing cycle' },
+        },
+      },
+    },
+    '/subscriptions/current': {
+      get: {
+        tags: ['Subscriptions'],
+        summary: 'Get active subscription for current user',
+        security: [{ bearerAuth: [] }],
+        responses: {
+          200: {
+            description: 'Active subscription details',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    success: { type: 'boolean', example: true },
+                    data: { $ref: '#/components/schemas/SubscriptionRecord' },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+    '/subscriptions/cancel': {
+      post: {
+        tags: ['Subscriptions'],
+        summary: 'Cancel active recurring subscription',
+        security: [{ bearerAuth: [] }],
+        responses: {
+          200: {
+            description: 'Subscription canceled',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    success: { type: 'boolean', example: true },
+                    message: { type: 'string', example: 'Subscription canceled successfully.' },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+    '/analytics/track': {
+      post: {
+        tags: ['Analytics'],
+        summary: 'Record client telemetry or page view event',
+        description: 'Logs incoming user traffic, device information, and referral telemetry without requiring full authentication.',
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: { $ref: '#/components/schemas/TrafficTrackRequest' },
+            },
+          },
+        },
+        responses: {
+          200: {
+            description: 'Event logged',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    success: { type: 'boolean', example: true },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+    '/analytics/summary': {
+      get: {
+        tags: ['Analytics'],
+        summary: 'Get platform traffic summary and trends',
+        parameters: [
+          {
+            name: 'days',
+            in: 'query',
+            description: 'Analysis period in days (default 7)',
+            schema: { type: 'integer', default: 7 },
+          },
+        ],
+        responses: {
+          200: {
+            description: 'Traffic summary metrics',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    success: { type: 'boolean', example: true },
+                    data: {
+                      type: 'object',
+                      properties: {
+                        summary: {
+                          type: 'object',
+                          properties: {
+                            totalViews: { type: 'integer', example: 1420 },
+                            uniqueVisitors: { type: 'integer', example: 980 },
+                            bounceRate: { type: 'number', example: 28.4 },
+                          },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+    '/admin/dashboard': {
+      get: {
+        tags: ['Admin'],
+        summary: 'Admin dashboard KPI overview and aggregated charts',
+        description: 'Comprehensive administrative intelligence: revenue, MRR, user counts, 7-day traffic chart, system health, device breakdown, and live platform activity.',
+        security: [{ bearerAuth: [] }],
+        responses: {
+          200: {
+            description: 'Dashboard stats payload',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    success: { type: 'boolean', example: true },
+                    data: { $ref: '#/components/schemas/AdminDashboardStats' },
+                  },
+                },
+              },
+            },
+          },
+          403: { description: 'Forbidden (Admin role required)' },
+        },
+      },
+    },
+    '/admin/users': {
+      get: {
+        tags: ['Admin'],
+        summary: 'List and search registered users with purchase stats',
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          {
+            name: 'page',
+            in: 'query',
+            schema: { type: 'integer', default: 1 },
+          },
+          {
+            name: 'limit',
+            in: 'query',
+            schema: { type: 'integer', default: 50 },
+          },
+          {
+            name: 'search',
+            in: 'query',
+            description: 'Search by user full name or email',
+            schema: { type: 'string' },
+          },
+          {
+            name: 'role',
+            in: 'query',
+            description: 'Filter by role (user, creator, admin)',
+            schema: { type: 'string' },
+          },
+        ],
+        responses: {
+          200: {
+            description: 'List of users',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    success: { type: 'boolean', example: true },
+                    data: {
+                      type: 'object',
+                      properties: {
+                        items: {
+                          type: 'array',
+                          items: { $ref: '#/components/schemas/AdminUserItem' },
+                        },
+                        total: { type: 'integer', example: 42 },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          403: { description: 'Forbidden' },
+        },
+      },
+    },
+    '/admin/users/{id}/role': {
+      put: {
+        tags: ['Admin'],
+        summary: 'Elevate or modify user permission role',
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          {
+            name: 'id',
+            in: 'path',
+            required: true,
+            schema: { type: 'string' },
+          },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: { $ref: '#/components/schemas/AdminUpdateRoleRequest' },
+            },
+          },
+        },
+        responses: {
+          200: {
+            description: 'User role updated',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    success: { type: 'boolean', example: true },
+                    data: { $ref: '#/components/schemas/AdminUserItem' },
+                    message: { type: 'string', example: 'User role updated to admin.' },
+                  },
+                },
+              },
+            },
+          },
+          404: { description: 'User not found' },
+        },
+      },
+    },
+    '/admin/purchases': {
+      get: {
+        tags: ['Admin'],
+        summary: 'Track subscription and upgrade transaction ledger',
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          {
+            name: 'page',
+            in: 'query',
+            schema: { type: 'integer', default: 1 },
+          },
+          {
+            name: 'limit',
+            in: 'query',
+            schema: { type: 'integer', default: 50 },
+          },
+          {
+            name: 'plan',
+            in: 'query',
+            description: 'Filter by planId (pro, enterprise, all)',
+            schema: { type: 'string' },
+          },
+        ],
+        responses: {
+          200: {
+            description: 'Purchases ledger and summary',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    success: { type: 'boolean', example: true },
+                    data: {
+                      type: 'object',
+                      properties: {
+                        items: {
+                          type: 'array',
+                          items: { $ref: '#/components/schemas/PurchaseRecord' },
+                        },
+                        total: { type: 'integer', example: 12 },
+                        summary: {
+                          type: 'object',
+                          properties: {
+                            totalRevenue: { type: 'number', example: 158.96 },
+                            activeSubscriptions: { type: 'integer', example: 4 },
+                            totalPurchases: { type: 'integer', example: 8 },
+                          },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+    '/admin/traffic': {
+      get: {
+        tags: ['Admin'],
+        summary: 'Detailed web traffic and visitor analytics',
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          {
+            name: 'days',
+            in: 'query',
+            schema: { type: 'integer', default: 7 },
+          },
+        ],
+        responses: {
+          200: {
+            description: 'Detailed traffic metrics',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    success: { type: 'boolean', example: true },
+                    data: {
+                      type: 'object',
+                      properties: {
+                        summary: {
+                          type: 'object',
+                          properties: {
+                            totalViews: { type: 'integer', example: 840 },
+                            uniqueVisitors: { type: 'integer', example: 420 },
+                            bounceRate: { type: 'number', example: 24.5 },
+                          },
+                        },
+                        topPages: {
+                          type: 'array',
+                          items: {
+                            type: 'object',
+                            properties: {
+                              path: { type: 'string' },
+                              views: { type: 'integer' },
+                            },
+                          },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+    '/admin/memes': {
+      get: {
+        tags: ['Admin'],
+        summary: 'List all memes across the platform for moderation',
+        security: [{ bearerAuth: [] }],
+        responses: {
+          200: {
+            description: 'List of memes with author information',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    success: { type: 'boolean', example: true },
+                    data: {
+                      type: 'object',
+                      properties: {
+                        items: {
+                          type: 'array',
+                          items: { $ref: '#/components/schemas/SavedMemeItem' },
+                        },
+                        total: { type: 'integer', example: 9 },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+    '/admin/memes/{id}': {
+      delete: {
+        tags: ['Admin'],
+        summary: 'Administratively remove or moderate a meme',
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          {
+            name: 'id',
+            in: 'path',
+            required: true,
+            schema: { type: 'string' },
+          },
+        ],
+        responses: {
+          200: {
+            description: 'Meme removed by moderator',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    success: { type: 'boolean', example: true },
+                    message: { type: 'string', example: 'Meme deleted by administrator.' },
+                  },
+                },
+              },
+            },
+          },
+          404: { description: 'Meme not found' },
         },
       },
     },
