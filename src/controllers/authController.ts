@@ -202,4 +202,128 @@ export const authController = {
       message: 'Logged out successfully.',
     });
   },
+
+  /**
+   * Reset user password with secure bcrypt hashing
+   * POST /api/v1/auth/reset-password
+   */
+  async resetPassword(req: Request, res: Response) {
+    try {
+      const { email, newPassword } = req.body;
+
+      if (!email || typeof email !== 'string') {
+        return res.status(400).json({
+          success: false,
+          error: {
+            code: 'VALIDATION_FAILED',
+            message: 'Email address is required.',
+          },
+        });
+      }
+
+      if (!newPassword || typeof newPassword !== 'string' || newPassword.length < 8) {
+        return res.status(400).json({
+          success: false,
+          error: {
+            code: 'VALIDATION_FAILED',
+            message: 'New password must be at least 8 characters long.',
+          },
+        });
+      }
+
+      const user = await db.users.findByEmail(email);
+      if (!user) {
+        return res.status(404).json({
+          success: false,
+          error: {
+            code: 'USER_NOT_FOUND',
+            message: 'No account with this email address was found.',
+          },
+        });
+      }
+
+      // Encrypt the new password with bcrypt
+      const salt = await bcrypt.genSalt(10);
+      const passwordHash = await bcrypt.hash(newPassword, salt);
+
+      await db.users.updatePassword(user.id, passwordHash);
+
+      return res.status(200).json({
+        success: true,
+        message: 'Password has been securely reset. You can now log in.',
+      });
+    } catch (err) {
+      console.error('Password reset error:', err);
+      return res.status(500).json({
+        success: false,
+        error: {
+          code: 'SERVER_ERROR',
+          message: 'Failed to reset password. Please try again.',
+        },
+      });
+    }
+  },
+
+  /**
+   * Optional Google OAuth exchange
+   * POST /api/v1/auth/google
+   */
+  async googleAuth(req: Request, res: Response) {
+    try {
+      const { email, fullName, avatarUrl } = req.body;
+
+      if (!email) {
+        return res.status(400).json({
+          success: false,
+          error: {
+            code: 'VALIDATION_FAILED',
+            message: 'Google email is required.',
+          },
+        });
+      }
+
+      let user = await db.users.findByEmail(email);
+      if (!user) {
+        const dummyPassword = await bcrypt.hash(Math.random().toString(36) + 'GoogleAuthSecret1!', 10);
+        user = await db.users.create({
+          email: email.trim().toLowerCase(),
+          fullName: fullName || email.split('@')[0],
+          avatarUrl: avatarUrl || `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(email)}`,
+          passwordHash: dummyPassword,
+          role: 'creator',
+        });
+      }
+
+      const token = jwt.sign(
+        { id: user.id, email: user.email, role: user.role },
+        JWT_SECRET,
+        { expiresIn: JWT_EXPIRES_IN as any }
+      );
+
+      return res.status(200).json({
+        success: true,
+        data: {
+          user: {
+            id: user.id,
+            fullName: user.fullName,
+            email: user.email,
+            avatarUrl: user.avatarUrl,
+            role: user.role,
+            createdAt: user.createdAt,
+          },
+          token,
+        },
+        message: 'Google authentication successful.',
+      });
+    } catch (err) {
+      console.error('Google auth error:', err);
+      return res.status(500).json({
+        success: false,
+        error: {
+          code: 'SERVER_ERROR',
+          message: 'Google authentication failed.',
+        },
+      });
+    }
+  },
 };

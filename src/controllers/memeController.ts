@@ -174,4 +174,78 @@ export const memeController = {
       });
     }
   },
+
+  /**
+   * Update/Edit existing meme
+   * PUT /api/v1/memes/:id
+   */
+  async updateMeme(req: AuthenticatedRequest, res: Response) {
+    try {
+      const id = String(req.params.id);
+      const updates = req.body;
+      const updated = await db.memes.update(id, updates);
+      if (!updated) {
+        return res.status(404).json({
+          success: false,
+          error: { code: 'NOT_FOUND', message: 'Meme not found' },
+        });
+      }
+      return res.status(200).json({
+        success: true,
+        data: updated,
+        message: 'Meme updated successfully',
+      });
+    } catch (err) {
+      console.error('Error updating meme:', err);
+      return res.status(500).json({
+        success: false,
+        error: { code: 'SERVER_ERROR', message: 'Failed to update meme' },
+      });
+    }
+  },
+
+  /**
+   * Delete meme
+   * DELETE /api/v1/memes/:id
+   */
+  async deleteMeme(req: AuthenticatedRequest, res: Response) {
+    try {
+      const id = String(req.params.id);
+      const userId = req.user?.id;
+      const success = await db.memes.delete(id, req.user?.role === 'admin' ? undefined : userId);
+      return res.status(200).json({
+        success,
+        message: success ? 'Meme deleted successfully' : 'Meme not found or unauthorized',
+      });
+    } catch (err) {
+      console.error('Error deleting meme:', err);
+      return res.status(500).json({
+        success: false,
+        error: { code: 'SERVER_ERROR', message: 'Failed to delete meme' },
+      });
+    }
+  },
+
+  /**
+   * Toggle publish / public status
+   * POST /api/v1/memes/:id/publish
+   */
+  async publishMeme(req: AuthenticatedRequest, res: Response) {
+    try {
+      const id = String(req.params.id);
+      const { isPublic = true } = req.body;
+      const updated = await db.memes.update(id, { is_public: Boolean(isPublic) });
+      return res.status(200).json({
+        success: true,
+        data: updated,
+        message: isPublic ? 'Meme published to community.' : 'Meme set to private.',
+      });
+    } catch (err) {
+      console.error('Error publishing meme:', err);
+      return res.status(500).json({
+        success: false,
+        error: { code: 'SERVER_ERROR', message: 'Failed to update visibility' },
+      });
+    }
+  },
 };

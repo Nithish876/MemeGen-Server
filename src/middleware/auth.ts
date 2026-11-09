@@ -95,3 +95,20 @@ export async function optionalAuth(
 
   next();
 }
+
+export function requireAdmin(
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+) {
+  if (!req.user || (req.user.role !== 'admin' && req.user.role !== 'owner')) {
+    return res.status(403).json({
+      success: false,
+      error: {
+        code: 'FORBIDDEN',
+        message: 'Administrator privileges are required to access this resource.',
+      },
+    });
+  }
+  next();
+}

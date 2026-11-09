@@ -67,10 +67,13 @@ export interface MemeDraft {
   id: string;
   userId: string;
   templateId: string;
+  template?: MemeTemplate;
   memeTitle: string;
+  title?: string;
   textLayers: TextLayer[];
   canvasSettings: CanvasSettings;
   previewImageUrl?: string | null;
+  previewUrl?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -114,6 +117,93 @@ export interface ApiResponse<T> {
   success: boolean;
   data: T;
   message?: string;
+}
+
+export interface PurchaseRecord {
+  id: string;
+  userId: string;
+  userEmail: string;
+  userName: string;
+  planId: 'free' | 'pro' | 'enterprise' | string;
+  billingCycle: 'monthly' | 'yearly';
+  amount: number;
+  currency: string;
+  status: 'active' | 'completed' | 'cancelled' | 'refunded';
+  orderId: string;
+  transactionId?: string;
+  paymentMethod: string;
+  createdAt: string;
+}
+
+export interface TrafficEvent {
+  id: string;
+  path: string;
+  referrer?: string;
+  device?: string;
+  browser?: string;
+  ip?: string;
+  userId?: string;
+  timestamp: string;
+}
+
+export interface AiCaptionSuggestion {
+  id: string;
+  topText: string;
+  bottomText: string;
+  singleText: string;
+  tone: string;
+  score?: number;
+}
+
+export interface AdminDashboardStats {
+  kpis: {
+    totalRevenue: number;
+    monthlyRecurringRevenue: number;
+    totalUsers: number;
+    activeProSubscribers: number;
+    totalMemes: number;
+    totalDrafts: number;
+    totalPageViews: number;
+    uniqueVisitors: number;
+    conversionRate: number;
+  };
+  trafficChart: Array<{
+    date: string;
+    views: number;
+    uniqueVisitors: number;
+  }>;
+  revenueChart: Array<{
+    month: string;
+    revenue: number;
+  }>;
+  deviceBreakdown: {
+    desktop: number;
+    mobile: number;
+    tablet: number;
+  };
+  topPages: Array<{
+    path: string;
+    views: number;
+    percentage: number;
+  }>;
+  topReferrers: Array<{
+    source: string;
+    visitors: number;
+  }>;
+  recentActivity: Array<{
+    id: string;
+    type: 'signup' | 'purchase' | 'meme_created' | 'draft_saved';
+    title: string;
+    description: string;
+    timestamp: string;
+    meta?: any;
+  }>;
+  systemHealth: {
+    status: 'optimal' | 'degraded' | 'maintenance';
+    uptime: string;
+    database: string;
+    apiLatencyMs: number;
+  };
 }
 
 export interface ApiErrorResponse {

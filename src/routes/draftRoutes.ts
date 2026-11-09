@@ -1,10 +1,10 @@
 import { Router } from 'express';
 import { draftController } from '../controllers/draftController.js';
-import { authenticateToken } from '../middleware/auth.js';
+import { optionalAuth } from '../middleware/auth.js';
 
 const router = Router();
 
-router.use(authenticateToken);
+router.use(optionalAuth);
 
 router.post('/', draftController.saveDraft);
 router.get('/latest', draftController.getLatestDraft);

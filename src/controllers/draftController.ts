@@ -9,15 +9,31 @@ export const draftController = {
    */
   async saveDraft(req: AuthenticatedRequest, res: Response) {
     try {
-      const userId = req.user!.id;
-      const { id, templateId, memeTitle, textLayers, canvasSettings, previewImageUrl } = req.body;
+      const userId =
+        req.user?.id ||
+        req.body.userId ||
+        (req.headers['x-guest-id'] as string) ||
+        'guest';
 
-      if (!templateId) {
+      const {
+        id,
+        templateId,
+        template,
+        memeTitle,
+        title,
+        textLayers,
+        canvasSettings,
+        previewImageUrl,
+        previewUrl,
+      } = req.body;
+
+      const actualTemplateId = templateId || template?.id;
+      if (!actualTemplateId) {
         return res.status(400).json({
           success: false,
           error: {
             code: 'VALIDATION_FAILED',
-            message: 'Template ID is required to save a draft.',
+            message: 'Template or Template ID is required to save a draft.',
           },
         });
       }
@@ -25,11 +41,14 @@ export const draftController = {
       const draft = await db.drafts.saveDraft({
         id,
         userId,
-        templateId,
-        memeTitle: memeTitle || 'Untitled Meme',
+        templateId: actualTemplateId,
+        template,
+        memeTitle: memeTitle || title || 'Untitled Meme',
+        title: title || memeTitle || 'Untitled Meme',
         textLayers: textLayers || [],
         canvasSettings: canvasSettings || {},
-        previewImageUrl: previewImageUrl || null,
+        previewImageUrl: previewImageUrl || previewUrl || null,
+        previewUrl: previewUrl || previewImageUrl || null,
       });
 
       return res.status(200).json({
@@ -55,7 +74,12 @@ export const draftController = {
    */
   async getLatestDraft(req: AuthenticatedRequest, res: Response) {
     try {
-      const userId = req.user!.id;
+      const userId =
+        req.user?.id ||
+        (req.headers['x-guest-id'] as string) ||
+        (req.query.userId as string) ||
+        'guest';
+
       const draft = await db.drafts.getLatest(userId);
 
       return res.status(200).json({
@@ -80,7 +104,12 @@ export const draftController = {
    */
   async getUserDrafts(req: AuthenticatedRequest, res: Response) {
     try {
-      const userId = req.user!.id;
+      const userId =
+        req.user?.id ||
+        (req.headers['x-guest-id'] as string) ||
+        (req.query.userId as string) ||
+        'guest';
+
       const drafts = await db.drafts.getAllByUser(userId);
 
       return res.status(200).json({
@@ -105,7 +134,11 @@ export const draftController = {
    */
   async getDraftById(req: AuthenticatedRequest, res: Response) {
     try {
-      const userId = req.user!.id;
+      const userId =
+        req.user?.id ||
+        (req.headers['x-guest-id'] as string) ||
+        (req.query.userId as string);
+
       const id = String(req.params.id);
       const draft = await db.drafts.getById(id, userId);
 
@@ -141,7 +174,11 @@ export const draftController = {
    */
   async deleteDraft(req: AuthenticatedRequest, res: Response) {
     try {
-      const userId = req.user!.id;
+      const userId =
+        req.user?.id ||
+        (req.headers['x-guest-id'] as string) ||
+        (req.query.userId as string);
+
       const id = String(req.params.id);
       const success = await db.drafts.delete(id, userId);
 

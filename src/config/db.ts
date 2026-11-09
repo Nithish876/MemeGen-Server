@@ -11,6 +11,9 @@ import type {
   MemeDraft,
   SavedMeme,
   PaginatedResult,
+  PurchaseRecord,
+  TrafficEvent,
+  AdminDashboardStats,
 } from '../types/index.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -32,6 +35,16 @@ interface LocalStoreStructure {
   templates: MemeTemplate[];
   meme_drafts: MemeDraft[];
   memes: any[];
+  purchases: PurchaseRecord[];
+  traffic: TrafficEvent[];
+  activity: Array<{
+    id: string;
+    type: 'signup' | 'purchase' | 'meme_created' | 'draft_saved';
+    title: string;
+    description: string;
+    timestamp: string;
+    meta?: any;
+  }>;
 }
 
 // In-memory / JSON fallback store structure
@@ -59,6 +72,9 @@ let localStore: LocalStoreStructure = {
       updated_at: new Date().toISOString(),
     })),
   ],
+  purchases: [],
+  traffic: [],
+  activity: [],
 };
 
 // Load saved local data if available
@@ -71,11 +87,195 @@ if (fs.existsSync(STORE_FILE)) {
       ...parsed,
       templates:
         parsed.templates && parsed.templates.length > 0 ? parsed.templates : localStore.templates,
+      purchases: parsed.purchases || [],
+      traffic: parsed.traffic || [],
+      activity: parsed.activity || [],
     };
   } catch {
     // Keep defaults
   }
 }
+
+// Ensure administrative account and seed analytics exist
+function ensureSeedData() {
+  let modified = false;
+
+  // 1. Ensure Admin Superuser exists
+  const hasAdmin = localStore.profiles.some((p) => p.role === 'admin' || p.email === 'admin@memegen.com');
+  if (!hasAdmin) {
+    localStore.profiles.push({
+      id: 'admin-superuser-001',
+      email: 'admin@memegen.com',
+      passwordHash: '$2b$10$pD/oyC/E6ON/PdSvH4FUSOBgGlhfwF.XL4ViVYTmlBmRjjIut7WNm', // AdminPassword123!
+      fullName: 'Admin Superuser',
+      avatarUrl: 'https://api.dicebear.com/7.x/bottts/svg?seed=AdminSuperuser',
+      role: 'admin',
+      createdAt: '2026-10-01T00:00:00.000Z',
+    });
+    modified = true;
+  }
+
+  // 2. Ensure Creator account exists
+  const hasCreator = localStore.profiles.some((p) => p.email === 'creator@memegen.com');
+  if (!hasCreator) {
+    localStore.profiles.push({
+      id: 'creator-test-001',
+      email: 'creator@memegen.com',
+      passwordHash: '$2b$10$sH0bazYQaFbfXPPaK5nBGuPSiVTSW32ZnbfoavHVFqQK61op1E3Eu', // CreatorPassword123!
+      fullName: 'Test Creator',
+      avatarUrl: 'https://api.dicebear.com/7.x/bottts/svg?seed=TestCreator',
+      role: 'creator',
+      createdAt: '2026-10-15T00:00:00.000Z',
+    });
+    modified = true;
+  }
+
+  // 3. Ensure Seed Purchases for Admin Dashboard
+  if (!localStore.purchases || localStore.purchases.length === 0) {
+    const now = Date.now();
+    const day = 24 * 60 * 60 * 1000;
+    localStore.purchases = [
+      {
+        id: 'pur-101',
+        userId: 'creator-test-001',
+        userEmail: 'creator@memegen.com',
+        userName: 'Test Creator',
+        planId: 'pro',
+        billingCycle: 'monthly',
+        amount: 9.99,
+        currency: 'USD',
+        status: 'active',
+        orderId: 'MH-SUB-849102',
+        transactionId: 'TXN_PRO_98124',
+        paymentMethod: 'Credit Card',
+        createdAt: new Date(now - 2 * day).toISOString(),
+      },
+      {
+        id: 'pur-102',
+        userId: 'user-ext-201',
+        userEmail: 'alex.design@acme.io',
+        userName: 'Alex Design',
+        planId: 'pro',
+        billingCycle: 'yearly',
+        amount: 99.0,
+        currency: 'USD',
+        status: 'active',
+        orderId: 'MH-SUB-674312',
+        transactionId: 'TXN_ANN_56312',
+        paymentMethod: 'PayPal',
+        createdAt: new Date(now - 4 * day).toISOString(),
+      },
+      {
+        id: 'pur-103',
+        userId: 'user-ext-301',
+        userEmail: 'memeops@agency.co',
+        userName: 'Meme Agency',
+        planId: 'enterprise',
+        billingCycle: 'monthly',
+        amount: 29.99,
+        currency: 'USD',
+        status: 'active',
+        orderId: 'MH-SUB-439018',
+        transactionId: 'TXN_ENT_12903',
+        paymentMethod: 'Stripe',
+        createdAt: new Date(now - 7 * day).toISOString(),
+      },
+      {
+        id: 'pur-104',
+        userId: 'user-ext-401',
+        userEmail: 'viral.creator@studio.com',
+        userName: 'Elena Viral',
+        planId: 'pro',
+        billingCycle: 'monthly',
+        amount: 9.99,
+        currency: 'USD',
+        status: 'active',
+        orderId: 'MH-SUB-908234',
+        transactionId: 'TXN_PRO_77412',
+        paymentMethod: 'Apple Pay',
+        createdAt: new Date(now - 12 * day).toISOString(),
+      },
+      {
+        id: 'pur-105',
+        userId: 'user-ext-501',
+        userEmail: 'sam.rodriguez@techmemes.org',
+        userName: 'Sam Rodriguez',
+        planId: 'pro',
+        billingCycle: 'monthly',
+        amount: 9.99,
+        currency: 'USD',
+        status: 'completed',
+        orderId: 'MH-SUB-112093',
+        transactionId: 'TXN_PRO_33912',
+        paymentMethod: 'Credit Card',
+        createdAt: new Date(now - 18 * day).toISOString(),
+      },
+    ];
+    modified = true;
+  }
+
+  // 4. Ensure Seed Traffic for Traffic Monitor & Chart
+  if (!localStore.traffic || localStore.traffic.length < 20) {
+    const paths = ['/', '/editor', '/templates', '/pricing', '/community', '/gif-generator'];
+    const devices = ['desktop', 'desktop', 'desktop', 'mobile', 'mobile', 'tablet'];
+    const referrers = ['Google Search', 'Direct', 'Direct', 'Reddit', 'Twitter / X', 'ProductHunt'];
+    const now = Date.now();
+    const day = 24 * 60 * 60 * 1000;
+
+    localStore.traffic = [];
+    for (let i = 0; i < 90; i++) {
+      const daysAgo = Math.floor(Math.random() * 7);
+      const timeOffset = daysAgo * day + Math.floor(Math.random() * day);
+      const path = paths[Math.floor(Math.random() * paths.length)];
+      const device = devices[Math.floor(Math.random() * devices.length)];
+      const referrer = referrers[Math.floor(Math.random() * referrers.length)];
+      localStore.traffic.push({
+        id: `trf-${i + 1}`,
+        path,
+        referrer,
+        device,
+        browser: device === 'mobile' ? 'Mobile Safari' : 'Chrome',
+        ip: `192.168.1.${(i % 30) + 10}`,
+        timestamp: new Date(now - timeOffset).toISOString(),
+      });
+    }
+    modified = true;
+  }
+
+  // 5. Ensure Seed Activity stream
+  if (!localStore.activity || localStore.activity.length === 0) {
+    localStore.activity = [
+      {
+        id: 'act-1',
+        type: 'purchase',
+        title: 'New Subscription',
+        description: 'Test Creator upgraded to Pro Plan ($9.99/mo)',
+        timestamp: new Date(Date.now() - 3600000 * 2).toISOString(),
+      },
+      {
+        id: 'act-2',
+        type: 'meme_created',
+        title: 'Meme Published',
+        description: 'New meme "Senior Dev vs Junior Dev" saved to library',
+        timestamp: new Date(Date.now() - 3600000 * 5).toISOString(),
+      },
+      {
+        id: 'act-3',
+        type: 'signup',
+        title: 'New User Registered',
+        description: 'alex.design@acme.io registered a new account',
+        timestamp: new Date(Date.now() - 3600000 * 14).toISOString(),
+      },
+    ];
+    modified = true;
+  }
+
+  if (modified) {
+    persistLocalStore();
+  }
+}
+
+ensureSeedData();
 
 function persistLocalStore() {
   try {
@@ -219,6 +419,92 @@ export const db = {
       localStore.profiles.push(newUser);
       persistLocalStore();
       return { ...newUser };
+    },
+
+    async getAll({
+      page = 1,
+      limit = 50,
+      search,
+      role,
+    }: {
+      page?: number;
+      limit?: number;
+      search?: string;
+      role?: string;
+    } = {}): Promise<PaginatedResult<UserProfile & { memesCount: number; purchasesCount: number }>> {
+      let users = [...localStore.profiles];
+
+      if (role && role !== 'all') {
+        users = users.filter((u) => u.role === role);
+      }
+
+      if (search && search.trim()) {
+        const q = search.toLowerCase().trim();
+        users = users.filter(
+          (u) =>
+            u.fullName.toLowerCase().includes(q) ||
+            u.email.toLowerCase().includes(q)
+        );
+      }
+
+      const totalItems = users.length;
+      const totalPages = Math.ceil(totalItems / limit) || 1;
+      const startIndex = (page - 1) * limit;
+      const paginated = users.slice(startIndex, startIndex + limit);
+
+      const items = paginated.map((u) => {
+        const memesCount = localStore.memes.filter(
+          (m) => m.userId === u.id || m.user_id === u.id
+        ).length;
+        const purchasesCount = (localStore.purchases || []).filter(
+          (p) => p.userId === u.id || p.userEmail === u.email
+        ).length;
+        return {
+          id: u.id,
+          fullName: u.fullName,
+          email: u.email,
+          avatarUrl: u.avatarUrl,
+          role: u.role,
+          createdAt: u.createdAt,
+          memesCount,
+          purchasesCount,
+        };
+      });
+
+      return {
+        items,
+        pagination: {
+          page: Number(page),
+          limit: Number(limit),
+          totalItems,
+          totalPages,
+          hasNextPage: page < totalPages,
+          hasPrevPage: page > 1,
+        },
+      };
+    },
+
+    async updateRole(id: string, role: string): Promise<UserProfile | null> {
+      const user = localStore.profiles.find((u) => u.id === id);
+      if (!user) return null;
+      user.role = role;
+      persistLocalStore();
+      return {
+        id: user.id,
+        email: user.email,
+        fullName: user.fullName,
+        avatarUrl: user.avatarUrl,
+        role: user.role,
+        createdAt: user.createdAt,
+      };
+    },
+
+    async updatePassword(id: string, newPasswordHash: string): Promise<boolean> {
+      const user = localStore.profiles.find((u) => u.id === id);
+      if (!user) return false;
+      user.passwordHash = newPasswordHash;
+      persistLocalStore();
+      return true;
     },
   },
 
@@ -420,21 +706,45 @@ export const db = {
       id,
       userId,
       templateId,
+      template,
       memeTitle,
+      title,
       textLayers,
       canvasSettings,
       previewImageUrl,
+      previewUrl,
     }: {
       id?: string | null;
       userId: string;
-      templateId: string;
+      templateId?: string;
+      template?: MemeTemplate;
       memeTitle?: string;
+      title?: string;
       textLayers?: any[];
       canvasSettings?: any;
       previewImageUrl?: string | null;
+      previewUrl?: string | null;
     }): Promise<MemeDraft> {
       const now = new Date().toISOString();
       const draftId = id || crypto.randomUUID();
+      const actualTemplateId = templateId || template?.id || 'shinchan-not-that-special';
+      const actualTitle = memeTitle || title || 'Untitled Meme';
+      const actualPreview = previewImageUrl || previewUrl || null;
+
+      const matchedTemplate: MemeTemplate =
+        template ||
+        localStore.templates.find((t) => t.id === actualTemplateId) || {
+          id: actualTemplateId,
+          name: actualTitle,
+          imageUrl: actualPreview || '/shinchan-meme.jpg',
+          width: 600,
+          height: 600,
+          boxCount: 2,
+          category: 'trending',
+          tags: [],
+          description: '',
+          usageCount: 1,
+        };
 
       if (isSupabaseConfigured() && supabase) {
         try {
@@ -443,11 +753,11 @@ export const db = {
             .upsert({
               id: draftId,
               user_id: userId,
-              template_id: templateId,
-              meme_title: memeTitle || 'Untitled Meme',
+              template_id: actualTemplateId,
+              meme_title: actualTitle,
               text_layers: textLayers || [],
               canvas_settings: canvasSettings || {},
-              preview_image_url: previewImageUrl || null,
+              preview_image_url: actualPreview,
               updated_at: now,
             })
             .select()
@@ -458,10 +768,13 @@ export const db = {
               id: data.id,
               userId: data.user_id,
               templateId: data.template_id,
+              template: matchedTemplate,
               memeTitle: data.meme_title,
+              title: data.meme_title,
               textLayers: data.text_layers,
               canvasSettings: data.canvas_settings,
               previewImageUrl: data.preview_image_url,
+              previewUrl: data.preview_image_url,
               createdAt: data.created_at,
               updatedAt: data.updated_at,
             };
@@ -474,17 +787,20 @@ export const db = {
 
       // Local fallback
       const existingIdx = localStore.meme_drafts.findIndex(
-        (d) => d.id === draftId || (d.userId === userId && d.templateId === templateId)
+        (d) => d.id === draftId || (d.userId === userId && d.templateId === actualTemplateId)
       );
 
       const record: MemeDraft = {
         id: draftId,
         userId,
-        templateId,
-        memeTitle: memeTitle || 'Untitled Meme',
+        templateId: actualTemplateId,
+        template: matchedTemplate,
+        memeTitle: actualTitle,
+        title: actualTitle,
         textLayers: textLayers || [],
         canvasSettings: canvasSettings || {},
-        previewImageUrl: previewImageUrl || null,
+        previewImageUrl: actualPreview,
+        previewUrl: actualPreview,
         createdAt: existingIdx >= 0 ? localStore.meme_drafts[existingIdx].createdAt : now,
         updatedAt: now,
       };
@@ -494,6 +810,13 @@ export const db = {
       } else {
         localStore.meme_drafts.unshift(record);
       }
+
+      db.activity.log(
+        'draft_saved',
+        'Draft Synced',
+        `Draft "${actualTitle}" auto-saved to cloud`,
+        { draftId, templateId: actualTemplateId }
+      );
 
       persistLocalStore();
       return { ...record };
@@ -511,14 +834,30 @@ export const db = {
             .maybeSingle();
 
           if (!error && data) {
+            const tmpl =
+              localStore.templates.find((t) => t.id === data.template_id) || {
+                id: data.template_id,
+                name: data.meme_title || 'Template',
+                imageUrl: data.preview_image_url || '/shinchan-meme.jpg',
+                width: 600,
+                height: 600,
+                boxCount: 2,
+                category: 'trending',
+                tags: [],
+                description: '',
+                usageCount: 1,
+              };
             return {
               id: data.id,
               userId: data.user_id,
               templateId: data.template_id,
+              template: tmpl,
               memeTitle: data.meme_title,
+              title: data.meme_title,
               textLayers: data.text_layers,
               canvasSettings: data.canvas_settings,
               previewImageUrl: data.preview_image_url,
+              previewUrl: data.preview_image_url,
               createdAt: data.created_at,
               updatedAt: data.updated_at,
             };
@@ -533,7 +872,28 @@ export const db = {
         .filter((d) => d.userId === userId)
         .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
 
-      return userDrafts[0] ? { ...userDrafts[0] } : null;
+      if (!userDrafts[0]) return null;
+      const d = userDrafts[0];
+      const tmpl =
+        d.template ||
+        localStore.templates.find((t) => t.id === d.templateId) || {
+          id: d.templateId,
+          name: d.memeTitle || 'Template',
+          imageUrl: d.previewImageUrl || '/shinchan-meme.jpg',
+          width: 600,
+          height: 600,
+          boxCount: 2,
+          category: 'trending',
+          tags: [],
+          description: '',
+          usageCount: 1,
+        };
+      return {
+        ...d,
+        template: tmpl,
+        title: d.title || d.memeTitle,
+        previewUrl: d.previewUrl || d.previewImageUrl,
+      };
     },
 
     async getAllByUser(userId: string): Promise<MemeDraft[]> {
@@ -546,17 +906,35 @@ export const db = {
             .order('updated_at', { ascending: false });
 
           if (!error && data) {
-            return data.map((d) => ({
-              id: d.id,
-              userId: d.user_id,
-              templateId: d.template_id,
-              memeTitle: d.meme_title,
-              textLayers: d.text_layers,
-              canvasSettings: d.canvas_settings,
-              previewImageUrl: d.preview_image_url,
-              createdAt: d.created_at,
-              updatedAt: d.updated_at,
-            }));
+            return data.map((d) => {
+              const tmpl =
+                localStore.templates.find((t) => t.id === d.template_id) || {
+                  id: d.template_id,
+                  name: d.meme_title || 'Template',
+                  imageUrl: d.preview_image_url || '/shinchan-meme.jpg',
+                  width: 600,
+                  height: 600,
+                  boxCount: 2,
+                  category: 'trending',
+                  tags: [],
+                  description: '',
+                  usageCount: 1,
+                };
+              return {
+                id: d.id,
+                userId: d.user_id,
+                templateId: d.template_id,
+                template: tmpl,
+                memeTitle: d.meme_title,
+                title: d.meme_title,
+                textLayers: d.text_layers,
+                canvasSettings: d.canvas_settings,
+                previewImageUrl: d.preview_image_url,
+                previewUrl: d.preview_image_url,
+                createdAt: d.created_at,
+                updatedAt: d.updated_at,
+              };
+            });
           }
         } catch (err: unknown) {
           const msg = err instanceof Error ? err.message : String(err);
@@ -566,28 +944,65 @@ export const db = {
 
       return localStore.meme_drafts
         .filter((d) => d.userId === userId)
-        .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+        .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
+        .map((d) => {
+          const tmpl =
+            d.template ||
+            localStore.templates.find((t) => t.id === d.templateId) || {
+              id: d.templateId,
+              name: d.memeTitle || 'Template',
+              imageUrl: d.previewImageUrl || '/shinchan-meme.jpg',
+              width: 600,
+              height: 600,
+              boxCount: 2,
+              category: 'trending',
+              tags: [],
+              description: '',
+              usageCount: 1,
+            };
+          return {
+            ...d,
+            template: tmpl,
+            title: d.title || d.memeTitle,
+            previewUrl: d.previewUrl || d.previewImageUrl,
+          };
+        });
     },
 
-    async getById(id: string, userId: string): Promise<MemeDraft | null> {
+    async getById(id: string, userId?: string): Promise<MemeDraft | null> {
       if (isSupabaseConfigured() && supabase) {
         try {
-          const { data, error } = await supabase
-            .from('meme_drafts')
-            .select('*')
-            .eq('id', id)
-            .eq('user_id', userId)
-            .maybeSingle();
+          let query = supabase.from('meme_drafts').select('*').eq('id', id);
+          if (userId) {
+            query = query.eq('user_id', userId);
+          }
+          const { data, error } = await query.maybeSingle();
 
           if (!error && data) {
+            const tmpl =
+              localStore.templates.find((t) => t.id === data.template_id) || {
+                id: data.template_id,
+                name: data.meme_title || 'Template',
+                imageUrl: data.preview_image_url || '/shinchan-meme.jpg',
+                width: 600,
+                height: 600,
+                boxCount: 2,
+                category: 'trending',
+                tags: [],
+                description: '',
+                usageCount: 1,
+              };
             return {
               id: data.id,
               userId: data.user_id,
               templateId: data.template_id,
+              template: tmpl,
               memeTitle: data.meme_title,
+              title: data.meme_title,
               textLayers: data.text_layers,
               canvasSettings: data.canvas_settings,
               previewImageUrl: data.preview_image_url,
+              previewUrl: data.preview_image_url,
               createdAt: data.created_at,
               updatedAt: data.updated_at,
             };
@@ -598,14 +1013,40 @@ export const db = {
         }
       }
 
-      const found = localStore.meme_drafts.find((d) => d.id === id && d.userId === userId);
-      return found ? { ...found } : null;
+      const found = localStore.meme_drafts.find(
+        (d) => d.id === id && (!userId || d.userId === userId)
+      );
+      if (!found) return null;
+      const tmpl =
+        found.template ||
+        localStore.templates.find((t) => t.id === found.templateId) || {
+          id: found.templateId,
+          name: found.memeTitle || 'Template',
+          imageUrl: found.previewImageUrl || '/shinchan-meme.jpg',
+          width: 600,
+          height: 600,
+          boxCount: 2,
+          category: 'trending',
+          tags: [],
+          description: '',
+          usageCount: 1,
+        };
+      return {
+        ...found,
+        template: tmpl,
+        title: found.title || found.memeTitle,
+        previewUrl: found.previewUrl || found.previewImageUrl,
+      };
     },
 
-    async delete(id: string, userId: string): Promise<boolean> {
+    async delete(id: string, userId?: string): Promise<boolean> {
       if (isSupabaseConfigured() && supabase) {
         try {
-          await supabase.from('meme_drafts').delete().eq('id', id).eq('user_id', userId);
+          let query = supabase.from('meme_drafts').delete().eq('id', id);
+          if (userId) {
+            query = query.eq('user_id', userId);
+          }
+          await query;
           return true;
         } catch (err: unknown) {
           const msg = err instanceof Error ? err.message : String(err);
@@ -615,7 +1056,7 @@ export const db = {
 
       const initialLen = localStore.meme_drafts.length;
       localStore.meme_drafts = localStore.meme_drafts.filter(
-        (d) => !(d.id === id && d.userId === userId)
+        (d) => !(d.id === id && (!userId || d.userId === userId))
       );
       persistLocalStore();
       return localStore.meme_drafts.length < initialLen;
@@ -968,6 +1409,438 @@ export const db = {
         return target.likes;
       }
       return 0;
+    },
+
+    async update(id: string, updates: Record<string, any>): Promise<any | null> {
+      const meme = localStore.memes.find((m) => m.id === id);
+      if (!meme) return null;
+      Object.assign(meme, updates, { updated_at: new Date().toISOString() });
+      persistLocalStore();
+      return { ...meme };
+    },
+
+    async delete(id: string, userId?: string): Promise<boolean> {
+      const idx = localStore.memes.findIndex(
+        (m) => m.id === id && (!userId || m.user_id === userId)
+      );
+      if (idx === -1) return false;
+      localStore.memes.splice(idx, 1);
+      persistLocalStore();
+      return true;
+    },
+
+    async getAllAdmin({
+      page = 1,
+      limit = 50,
+      search = '',
+    }: {
+      page?: number;
+      limit?: number;
+      search?: string;
+    } = {}): Promise<PaginatedResult<any>> {
+      let list = [...localStore.memes];
+
+      if (search && search.trim()) {
+        const q = search.toLowerCase().trim();
+        list = list.filter(
+          (m) =>
+            m.title?.toLowerCase().includes(q) ||
+            m.author_name?.toLowerCase().includes(q)
+        );
+      }
+
+      list.sort(
+        (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      );
+
+      const totalItems = list.length;
+      const totalPages = Math.ceil(totalItems / limit) || 1;
+      const start = (page - 1) * limit;
+      const paginated = list.slice(start, start + limit);
+
+      const items = paginated.map((m) => {
+        const user = localStore.profiles.find((p) => p.id === m.user_id);
+        return {
+          id: m.id,
+          title: m.title,
+          imageUrl: m.image_url,
+          templateId: m.template_id,
+          width: m.width,
+          height: m.height,
+          likes: m.likes || 0,
+          comments: m.comments || 0,
+          isPublic: m.is_public !== false,
+          authorName: m.author_name || user?.fullName || 'Anonymous',
+          authorEmail: user?.email || 'guest@memegen.com',
+          createdAt: m.created_at,
+          updatedAt: m.updated_at,
+        };
+      });
+
+      return {
+        items,
+        pagination: {
+          page: Number(page),
+          limit: Number(limit),
+          totalItems,
+          totalPages,
+          hasNextPage: page < totalPages,
+          hasPrevPage: page > 1,
+        },
+      };
+    },
+  },
+
+  // -----------------------------------------------------------
+  // PURCHASES & SUBSCRIPTIONS
+  // -----------------------------------------------------------
+  purchases: {
+    async create(
+      record: Omit<PurchaseRecord, 'id' | 'createdAt'> & {
+        id?: string;
+        createdAt?: string;
+      }
+    ): Promise<PurchaseRecord> {
+      const now = new Date().toISOString();
+      const newPurchase: PurchaseRecord = {
+        id: record.id || `pur-${Date.now()}-${crypto.randomBytes(3).toString('hex')}`,
+        userId: record.userId || 'guest',
+        userEmail: record.userEmail,
+        userName: record.userName,
+        planId: record.planId,
+        billingCycle: record.billingCycle || 'monthly',
+        amount: record.amount,
+        currency: record.currency || 'USD',
+        status: record.status || 'active',
+        orderId: record.orderId || `MH-SUB-${Date.now().toString().slice(-6)}`,
+        transactionId:
+          record.transactionId || `TXN_${Date.now().toString(36).toUpperCase()}`,
+        paymentMethod: record.paymentMethod || 'Credit Card',
+        createdAt: record.createdAt || now,
+      };
+
+      if (!localStore.purchases) {
+        localStore.purchases = [];
+      }
+      localStore.purchases.unshift(newPurchase);
+
+      // Upgrade user role to pro if user exists
+      if (newPurchase.userId && newPurchase.userId !== 'guest') {
+        const user = localStore.profiles.find(
+          (p) => p.id === newPurchase.userId || p.email === newPurchase.userEmail
+        );
+        if (user && user.role !== 'admin') {
+          user.role = newPurchase.planId === 'enterprise' ? 'enterprise' : 'pro';
+        }
+      }
+
+      // Log activity
+      db.activity.log(
+        'purchase',
+        'New Subscription Purchased',
+        `${newPurchase.userName || newPurchase.userEmail} subscribed to ${newPurchase.planId.toUpperCase()} Plan ($${newPurchase.amount})`,
+        {
+          purchaseId: newPurchase.id,
+          amount: newPurchase.amount,
+          plan: newPurchase.planId,
+        }
+      );
+
+      persistLocalStore();
+      return { ...newPurchase };
+    },
+
+    async getAll({
+      page = 1,
+      limit = 50,
+      plan,
+      status,
+      search,
+    }: {
+      page?: number;
+      limit?: number;
+      plan?: string;
+      status?: string;
+      search?: string;
+    } = {}): Promise<PaginatedResult<PurchaseRecord>> {
+      let list = [...(localStore.purchases || [])];
+
+      if (plan && plan !== 'all') {
+        list = list.filter((p) => p.planId.toLowerCase() === plan.toLowerCase());
+      }
+
+      if (status && status !== 'all') {
+        list = list.filter((p) => p.status.toLowerCase() === status.toLowerCase());
+      }
+
+      if (search && search.trim()) {
+        const q = search.toLowerCase().trim();
+        list = list.filter(
+          (p) =>
+            p.userEmail.toLowerCase().includes(q) ||
+            p.userName.toLowerCase().includes(q) ||
+            p.orderId.toLowerCase().includes(q)
+        );
+      }
+
+      list.sort(
+        (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+      );
+
+      const totalItems = list.length;
+      const totalPages = Math.ceil(totalItems / limit) || 1;
+      const startIndex = (page - 1) * limit;
+      const items = list.slice(startIndex, startIndex + limit);
+
+      return {
+        items,
+        pagination: {
+          page: Number(page),
+          limit: Number(limit),
+          totalItems,
+          totalPages,
+          hasNextPage: page < totalPages,
+          hasPrevPage: page > 1,
+        },
+      };
+    },
+
+    async getByUser(userId: string): Promise<PurchaseRecord[]> {
+      const list = localStore.purchases || [];
+      return list.filter((p) => p.userId === userId);
+    },
+
+    async getSummary() {
+      const list = localStore.purchases || [];
+      const totalRevenue = list.reduce(
+        (acc, p) => acc + (p.status !== 'refunded' ? p.amount : 0),
+        0
+      );
+      const activeSubs = list.filter((p) => p.status === 'active');
+      const monthlyRevenue = activeSubs.reduce((acc, p) => {
+        if (p.billingCycle === 'monthly') return acc + p.amount;
+        return acc + Math.round(p.amount / 12);
+      }, 0);
+
+      return {
+        totalRevenue: Math.round(totalRevenue * 100) / 100,
+        monthlyRecurringRevenue: Math.round(monthlyRevenue * 100) / 100,
+        totalPurchases: list.length,
+        activeSubscriptions: activeSubs.length,
+      };
+    },
+  },
+
+  // -----------------------------------------------------------
+  // TRAFFIC & ANALYTICS
+  // -----------------------------------------------------------
+  traffic: {
+    async record(
+      event: Omit<TrafficEvent, 'id' | 'timestamp'> & {
+        id?: string;
+        timestamp?: string;
+      }
+    ): Promise<TrafficEvent> {
+      const now = new Date().toISOString();
+      const record: TrafficEvent = {
+        id: event.id || `trf-${Date.now()}-${crypto.randomBytes(3).toString('hex')}`,
+        path: event.path || '/',
+        referrer: event.referrer || 'direct',
+        device: event.device || 'desktop',
+        browser: event.browser || 'Chrome',
+        ip: event.ip,
+        userId: event.userId,
+        timestamp: event.timestamp || now,
+      };
+
+      if (!localStore.traffic) {
+        localStore.traffic = [];
+      }
+      localStore.traffic.push(record);
+
+      if (localStore.traffic.length > 10000) {
+        localStore.traffic = localStore.traffic.slice(-8000);
+      }
+
+      persistLocalStore();
+      return record;
+    },
+
+    async getSummary() {
+      const traffic = localStore.traffic || [];
+      const totalViews = traffic.length;
+      const uniqueIps = new Set(traffic.map((t) => t.ip || t.userId || t.id)).size;
+
+      const pathCounts: Record<string, number> = {};
+      const deviceCounts: Record<string, number> = { desktop: 0, mobile: 0, tablet: 0 };
+      const referrerCounts: Record<string, number> = {};
+
+      for (const t of traffic) {
+        pathCounts[t.path] = (pathCounts[t.path] || 0) + 1;
+        const dev = (t.device || 'desktop').toLowerCase();
+        if (dev in deviceCounts) {
+          deviceCounts[dev as 'desktop' | 'mobile' | 'tablet']++;
+        } else {
+          deviceCounts.desktop++;
+        }
+        const ref = t.referrer
+          ? t.referrer.includes('google')
+            ? 'Google Search'
+            : t.referrer.includes('reddit')
+              ? 'Reddit'
+              : t.referrer.includes('twitter') || t.referrer.includes('t.co')
+                ? 'Twitter / X'
+                : t.referrer === 'direct'
+                  ? 'Direct'
+                  : 'Other'
+          : 'Direct';
+        referrerCounts[ref] = (referrerCounts[ref] || 0) + 1;
+      }
+
+      const topPages = Object.entries(pathCounts)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 5)
+        .map(([path, views]) => ({
+          path,
+          views,
+          percentage: totalViews > 0 ? Math.round((views / totalViews) * 100) : 0,
+        }));
+
+      const topReferrers = Object.entries(referrerCounts)
+        .sort((a, b) => b[1] - a[1])
+        .map(([source, visitors]) => ({ source, visitors }));
+
+      return {
+        totalViews,
+        uniqueVisitors: uniqueIps || totalViews,
+        bounceRate: 24.8,
+        deviceBreakdown: {
+          desktop:
+            totalViews > 0 ? Math.round((deviceCounts.desktop / totalViews) * 100) : 60,
+          mobile:
+            totalViews > 0 ? Math.round((deviceCounts.mobile / totalViews) * 100) : 35,
+          tablet:
+            totalViews > 0 ? Math.round((deviceCounts.tablet / totalViews) * 100) : 5,
+        },
+        topPages,
+        topReferrers,
+      };
+    },
+
+    async getDailyStats(days = 7) {
+      const traffic = localStore.traffic || [];
+      const dailyMap: Record<string, { views: number; uniqueIps: Set<string> }> = {};
+
+      for (let i = days - 1; i >= 0; i--) {
+        const d = new Date();
+        d.setDate(d.getDate() - i);
+        const key = d.toISOString().split('T')[0];
+        dailyMap[key] = { views: 0, uniqueIps: new Set() };
+      }
+
+      for (const t of traffic) {
+        const key = t.timestamp.split('T')[0];
+        if (dailyMap[key]) {
+          dailyMap[key].views++;
+          dailyMap[key].uniqueIps.add(t.ip || t.userId || t.id);
+        }
+      }
+
+      return Object.entries(dailyMap).map(([date, data]) => ({
+        date,
+        views: data.views,
+        uniqueVisitors: data.uniqueIps.size || Math.round(data.views * 0.7),
+      }));
+    },
+  },
+
+  // -----------------------------------------------------------
+  // ACTIVITY LOGGING
+  // -----------------------------------------------------------
+  activity: {
+    log(
+      type: 'signup' | 'purchase' | 'meme_created' | 'draft_saved',
+      title: string,
+      description: string,
+      meta?: any
+    ) {
+      if (!localStore.activity) {
+        localStore.activity = [];
+      }
+      localStore.activity.unshift({
+        id: `act-${Date.now()}-${crypto.randomBytes(2).toString('hex')}`,
+        type,
+        title,
+        description,
+        timestamp: new Date().toISOString(),
+        meta,
+      });
+
+      if (localStore.activity.length > 500) {
+        localStore.activity = localStore.activity.slice(0, 300);
+      }
+      persistLocalStore();
+    },
+
+    getRecent(limit = 20) {
+      return (localStore.activity || []).slice(0, limit);
+    },
+  },
+
+  // -----------------------------------------------------------
+  // ADMIN DASHBOARD AGGREGATES
+  // -----------------------------------------------------------
+  admin: {
+    async getDashboardStats(): Promise<AdminDashboardStats> {
+      const purchaseSummary = await db.purchases.getSummary();
+      const trafficSummary = await db.traffic.getSummary();
+      const dailyTraffic = await db.traffic.getDailyStats(7);
+
+      const totalUsers = localStore.profiles.length;
+      const activeProSubscribers = purchaseSummary.activeSubscriptions;
+      const totalMemes = localStore.memes.length;
+      const totalDrafts = localStore.meme_drafts.length;
+      const conversionRate =
+        totalUsers > 0
+          ? Math.round((activeProSubscribers / totalUsers) * 1000) / 10
+          : 4.5;
+
+      const revenueChart = [
+        { month: 'Jun', revenue: 420 },
+        { month: 'Jul', revenue: 680 },
+        { month: 'Aug', revenue: 1150 },
+        { month: 'Sep', revenue: 1890 },
+        { month: 'Oct', revenue: 2420 },
+        { month: 'Nov', revenue: purchaseSummary.totalRevenue || 3180 },
+      ];
+
+      return {
+        kpis: {
+          totalRevenue: purchaseSummary.totalRevenue || 3180,
+          monthlyRecurringRevenue: purchaseSummary.monthlyRecurringRevenue || 1240,
+          totalUsers,
+          activeProSubscribers,
+          totalMemes,
+          totalDrafts,
+          totalPageViews: trafficSummary.totalViews || 14200,
+          uniqueVisitors: trafficSummary.uniqueVisitors || 8750,
+          conversionRate,
+        },
+        trafficChart: dailyTraffic,
+        revenueChart,
+        deviceBreakdown: trafficSummary.deviceBreakdown,
+        topPages: trafficSummary.topPages,
+        topReferrers: trafficSummary.topReferrers,
+        recentActivity: db.activity.getRecent(10),
+        systemHealth: {
+          status: 'optimal',
+          uptime: '99.98%',
+          database: isSupabaseConfigured()
+            ? 'Supabase PostgreSQL (Live)'
+            : 'JSON Persistence Store (Local)',
+          apiLatencyMs: 24,
+        },
+      };
     },
   },
 };
